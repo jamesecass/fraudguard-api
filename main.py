@@ -1,35 +1,35 @@
 import urllib.request
-from fastapi import FastAPI, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
-app = FastAPI(
-    title="FraudGuard API", 
-    description="Instantly detect disposable email addresses."
-)
+app = FastAPI(title="FraudGuard API")
 
-# 1. Fetch an updated open-source blocklist on startup
+# 1. Fetch blocklist on startup
 BLOCKLIST_URL = "https://githubusercontent.com"
 try:
     with urllib.request.urlopen(BLOCKLIST_URL) as response:
-        # Decode text and convert into a fast-lookup Python Set
         DISPOSABLE_DOMAINS = set(response.read().decode('utf-8').splitlines())
 except Exception:
-    # Fallback default list if GitHub is temporarily down
     DISPOSABLE_DOMAINS = {"mailinator.com", "trashmail.com", "10minutemail.com"}
 
-# 2. Define the exact input format your users must send
 class CheckEmailRequest(BaseModel):
     email: EmailStr
 
 @app.post("/v1/check-email")
-async def check_email(data: CheckEmailRequest):
-    # 3. Extract the domain name from the user's email input
+async def check_email(
+    data: CheckEmailRequest, 
+    # 2. Automatically look for RapidAPI's official security passport header
+    x_rapidapi_proxy_secret: Optional[str] = Header(None)
+):
+    # 3. IF you want to lock it down so ONLY RapidAPI can talk to it, uncomment lines 27-28
+    # if x_rapidapi_proxy_secret != os.environ.get("RAPIDAPI_SECRET"):
+    #     raise HTTPException(status_code=403, detail="Direct access forbidden. Use RapidAPI storefront.")
+
     email_domain = data.email.split("@")[-1].lower()
-    
-    # 4. Perform high-speed lookup
     is_disposable = email_domain in DISPOSABLE_DOMAINS
     
-    # 5. Return clean JSON to your customer
     return {
         "email": data.email,
         "domain": email_domain,
